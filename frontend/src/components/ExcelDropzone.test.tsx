@@ -11,7 +11,7 @@ import { setupServer } from "msw/node";
 import type { ParsedEmailRow } from "../api/types";
 import ExcelDropzone from "./ExcelDropzone";
 
-const BASE = "http://127.0.0.1:5000";
+const BASE = "*/api";
 
 const CANNED_ROWS: ParsedEmailRow[] = [
   { email: "alice@example.com", rowIndex: 1 },
@@ -19,7 +19,7 @@ const CANNED_ROWS: ParsedEmailRow[] = [
 ];
 
 const server = setupServer(
-  http.post(`${BASE}/api/parse-excel`, () =>
+  http.post(`${BASE}/parse-excel`, () =>
     HttpResponse.json(CANNED_ROWS, { status: 200 })
   )
 );
@@ -63,7 +63,7 @@ describe("ExcelDropzone", () => {
 
   it("shows an error message when the API returns 500", async () => {
     server.use(
-      http.post(`${BASE}/api/parse-excel`, () =>
+      http.post(`${BASE}/parse-excel`, () =>
         new HttpResponse(null, { status: 500 })
       )
     );
