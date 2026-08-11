@@ -28,7 +28,7 @@ function Invoke-Phase {
     } else {
         & $Script
     }
-    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Phase '$Name' failed with exit code $LASTEXITCODE" }
+    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Phase '$Name' failed with exit code $LASTEXITCODE" }
     Write-Host ">>> Phase: $Name - OK"
 }
 
