@@ -1,7 +1,7 @@
 package com.adi.naukri.orchestrator;
 
+import com.adi.naukri.api.AccountInput;
 import com.adi.naukri.automation.*;
-import com.adi.naukri.report.AccountStatus;
 import com.adi.naukri.report.ReportWriter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -15,11 +15,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests that JobOrchestrator.stop() immediately calls abort() on the running automator
- * and that the resulting job status is RUN_STOPPED (not FAILED) within a couple of seconds
- * — well before the 60-second fake sleep the blocking automator would otherwise take.
- *
- * Author: Adikarthik Gupta C B
+ * Tests that JobOrchestrator.stop() immediately calls abort()
+ * on the running automator.
  */
 class JobOrchestratorAbortTest {
 
@@ -36,115 +33,161 @@ class JobOrchestratorAbortTest {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // TC-ABORT-1: stop() calls abort() on the automator and job becomes RUN_STOPPED
-    //             well before the slow sleep finishes.
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
-    void stop_calls_abort_and_job_status_becomes_RUN_STOPPED_quickly() throws Exception {
-        // Flags / latches
-        AtomicBoolean abortCalled = new AtomicBoolean(false);
-        CountDownLatch runnerStarted = new CountDownLatch(1);  // fires when fake automator is "running"
-        CountDownLatch abortLatch   = new CountDownLatch(1);   // fires when abort() is called
+    void stop_calls_abort_and_job_status_becomes_RUN_STOPPED_quickly()
+            throws Exception {
 
-        /**
-         * Fake automator that:
-         *  1. Signals it has started (runnerStarted).
-         *  2. Blocks on a 60-second sleep — simulating a slow Playwright call.
-         *  3. Implements abort() by interrupting the sleep and setting abortCalled.
-         */
+        AtomicBoolean abortCalled = new AtomicBoolean(false);
+
+        CountDownLatch runnerStarted = new CountDownLatch(1);
+        CountDownLatch abortLatch = new CountDownLatch(1);
+
         Automator slowFake = new Automator() {
+
             private volatile Thread runnerThread;
 
             @Override
-            public List<StepResult> run(String email, String password,
-                                        AutomationRunMode mode, AutomatorConfig cfg,
-                                        PlaywrightSession session, ManualLoginGate gate,
-                                        StepListener listener) {
+            public List<StepResult> run(
+                    String email,
+                    String name,
+                    String password,
+                    AutomationRunMode mode,
+                    AutomatorConfig cfg,
+                    PlaywrightSession session,
+                    ManualLoginGate gate,
+                    StepListener listener) {
+
                 runnerThread = Thread.currentThread();
                 runnerStarted.countDown();
+
                 try {
-                    Thread.sleep(60_000); // would block for a full minute without abort()
+                    Thread.sleep(60_000);
                 } catch (InterruptedException e) {
-                    // abort() interrupted us — restore interrupt flag and exit
                     Thread.currentThread().interrupt();
                 }
-                // Return a failed result so the orchestrator sees a non-OK status.
-                return List.of(StepResult.failure(AutomationStep.LOGIN,
-                        "STOPPED_BY_ABORT", 0L));
+
+                return List.of(
+                        StepResult.failure(
+                                AutomationStep.LOGIN,
+                                "STOPPED_BY_ABORT",
+                                0L
+                        )
+                );
             }
 
             @Override
             public void abort() {
                 abortCalled.set(true);
                 abortLatch.countDown();
+
                 Thread t = runnerThread;
                 if (t != null) {
-                    t.interrupt(); // simulate ctx.close() unblocking the blocked Playwright call
+                    t.interrupt();
                 }
             }
         };
 
-        JobEventBus   bus    = new JobEventBus();
-        ReportWriter  writer = new ReportWriter();
-        RetryPolicy   policy = new RetryPolicy();
+        JobEventBus bus = new JobEventBus();
+        ReportWriter writer = new ReportWriter();
+        RetryPolicy policy = new RetryPolicy();
 
         orchestrator = new JobOrchestrator(
-                slowFake, policy, writer, bus, () -> null, new RunRegistry());
+                slowFake,
+                policy,
+                writer,
+                bus,
+                () -> null,
+                new RunRegistry()
+        );
 
-        // Collect events
         List<JobEvent> events = new CopyOnWriteArrayList<>();
+
         CountDownLatch stopped = new CountDownLatch(1);
-        bus.subscribe(null, e -> {
-            events.add(e);
-            if (e instanceof JobEvent.RunStopped) stopped.countDown();
+
+        bus.subscribe(null, event -> {
+            events.add(event);
+
+            if (event instanceof JobEvent.RunStopped) {
+                stopped.countDown();
+            }
         });
 
-        JobRequest req = new JobRequest(
-                List.of("slow@test.com"), "pw", false, false,
-                tempDir.toString(), null);
+        AccountInput account =
+                new AccountInput("Test User", "slow@test.com");
 
-        JobHandle handle = orchestrator.start(req);
+        JobRequest request = new JobRequest(
+                List.of(account),
+                "pw",
+                false,
+                false,
+                tempDir.toString(),
+                null,
+                null,
+                0L
+        );
 
-        // Wait until the fake automator is running, THEN immediately call stop()
-        assertTrue(runnerStarted.await(5, TimeUnit.SECONDS),
-                "Fake automator never signalled it started");
+        JobHandle handle = orchestrator.start(request);
+
+        assertTrue(
+                runnerStarted.await(5, TimeUnit.SECONDS),
+                "Fake automator never signalled it started"
+        );
 
         long stopCalledAt = System.currentTimeMillis();
+
         orchestrator.stop(handle.jobId());
 
-        // abort() must have been called
-        assertTrue(abortLatch.await(3, TimeUnit.SECONDS),
-                "abort() was never called after stop()");
-        assertTrue(abortCalled.get(), "abortCalled flag should be true");
+        assertTrue(
+                abortLatch.await(3, TimeUnit.SECONDS),
+                "abort() was never called after stop()"
+        );
 
-        // RUN_STOPPED must arrive well within the 60-second sleep timeout
-        assertTrue(stopped.await(10, TimeUnit.SECONDS),
-                "RUN_STOPPED event not received within 10 seconds");
+        assertTrue(
+                abortCalled.get(),
+                "abortCalled flag should be true"
+        );
 
-        long elapsed = System.currentTimeMillis() - stopCalledAt;
-        assertTrue(elapsed < 15_000,
-                "stop() took too long (" + elapsed + " ms); expected < 15 s");
+        assertTrue(
+                stopped.await(10, TimeUnit.SECONDS),
+                "RUN_STOPPED event not received within 10 seconds"
+        );
 
-        // Confirm the event sequence contains RUN_STOPPED (not only RUN_COMPLETED)
-        assertTrue(events.stream().anyMatch(e -> e instanceof JobEvent.RunStopped),
-                "Expected RunStopped event in stream");
-        assertFalse(events.stream().anyMatch(e -> e instanceof JobEvent.RunCompleted),
-                "Did not expect RunCompleted when run was stopped");
+        long elapsed =
+                System.currentTimeMillis() - stopCalledAt;
+
+        assertTrue(
+                elapsed < 15_000,
+                "stop() took too long (" + elapsed + " ms); expected < 15 s"
+        );
+
+        assertTrue(
+                events.stream()
+                        .anyMatch(e -> e instanceof JobEvent.RunStopped),
+                "Expected RunStopped event"
+        );
+
+        assertFalse(
+                events.stream()
+                        .anyMatch(e -> e instanceof JobEvent.RunCompleted),
+                "Did not expect RunCompleted when run was stopped"
+        );
 
         handle.future().get(5, TimeUnit.SECONDS);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // TC-ABORT-2: abort() is idempotent when no run is in progress
-    // ─────────────────────────────────────────────────────────────────────────
-
     @Test
     void abort_is_idempotent_when_no_run_in_progress() {
-        // NaukriAutomator.abort() should not throw when called outside a run
+
         NaukriAutomator automator = new NaukriAutomator();
-        assertDoesNotThrow(automator::abort, "abort() must not throw when idle");
-        assertDoesNotThrow(automator::abort, "abort() must not throw on second call");
+
+        assertDoesNotThrow(
+                automator::abort,
+                "abort() must not throw when idle"
+        );
+
+        assertDoesNotThrow(
+                automator::abort,
+                "abort() must not throw on second call"
+        );
     }
 }

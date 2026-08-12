@@ -104,7 +104,7 @@ class NaukriAutomatorAgainstMockIT {
     void full_happy_flow_completes_all_steps() throws Exception {
         try (PlaywrightSession session = new PlaywrightSession()) {
             List<StepResult> results = new NaukriAutomator().run(
-                    "ok@x.com", "password",
+                    "ok@x.com", "Test User", "password",
                     AutomationRunMode.HEADLESS,
                     cfg(false), session,
                     (email, timeout, dash) -> true,
@@ -138,7 +138,7 @@ class NaukriAutomatorAgainstMockIT {
     void bad_credentials_short_circuits_with_auth_failed() throws Exception {
         try (PlaywrightSession session = new PlaywrightSession()) {
             List<StepResult> results = new NaukriAutomator().run(
-                    "bad@x.com", "wrongpassword",
+                    "bad@x.com", "Test user", "wrongpassword",
                     AutomationRunMode.HEADLESS,
                     cfg(false), session,
                     (email, timeout, dash) -> true,
@@ -164,7 +164,7 @@ class NaukriAutomatorAgainstMockIT {
     void otp_page_short_circuits_with_requires_manual() throws Exception {
         try (PlaywrightSession session = new PlaywrightSession()) {
             List<StepResult> results = new NaukriAutomator().run(
-                    "otp@x.com", "anypassword",
+                    "otp@x.com", "Test User",  "anypassword",
                     AutomationRunMode.HEADLESS,
                     cfg(false), session,
                     (email, timeout, dash) -> true,
@@ -209,7 +209,7 @@ class NaukriAutomatorAgainstMockIT {
             };
 
             List<StepResult> results = new NaukriAutomator().run(
-                    "otp@x.com", "anypassword",
+                    "otp@x.com", "Test User", "anypassword",
                     AutomationRunMode.HEADLESS,
                     cfg(true), session,
                     testGate,
