@@ -11,7 +11,7 @@ import { setupServer } from "msw/node";
 import type { ParsedEmailRow } from "../api/types";
 import ExcelDropzone from "./ExcelDropzone";
 
-const BASE = "*/api";
+const BASE = "/api";
 
 const CANNED_ROWS: ParsedEmailRow[] = [
   { email: "alice@example.com", rowIndex: 1 },

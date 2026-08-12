@@ -5,10 +5,10 @@ import { startJob, stopJob, continueJob, skipJob, parseExcel } from "./rest";
 import type { StartJobResponse, ParsedEmailRow } from "./types";
 
 // Point all REST calls at port 5000 (default dev fallback)
-const BASE = "http://127.0.0.1:5000";
+const BASE = "/api";
 
 const server = setupServer(
-  http.post(`${BASE}/api/jobs`, async ({ request }) => {
+  http.post(`${BASE}/jobs`, async ({ request }) => {
     const body = await request.json() as Record<string, unknown>;
     const response: StartJobResponse = {
       jobId: "test-job-1",
@@ -21,19 +21,19 @@ const server = setupServer(
     return HttpResponse.json(response, { status: 200 });
   }),
 
-  http.post(`${BASE}/api/jobs/:id/stop`, () => {
+  http.post(`${BASE}/jobs/:id/stop`, () => {
     return new HttpResponse(null, { status: 204 });
   }),
 
-  http.post(`${BASE}/api/jobs/:id/continue`, () => {
+  http.post(`${BASE}/jobs/:id/continue`, () => {
     return new HttpResponse(null, { status: 204 });
   }),
 
-  http.post(`${BASE}/api/jobs/:id/skip`, () => {
+  http.post(`${BASE}/jobs/:id/skip`, () => {
     return new HttpResponse(null, { status: 204 });
   }),
 
-  http.post(`${BASE}/api/parse-excel`, () => {
+  http.post(`${BASE}/parse-excel`, () => {
     const rows: ParsedEmailRow[] = [
       { email: "alice@example.com", name: "Alice", rowIndex: 1 },
       { email: "bob@example.com", name: "Bob", rowIndex: 2 }
@@ -61,7 +61,7 @@ describe("REST client", () => {
 
   it("startJob throws on missing required fields (server returns 400)", async () => {
     server.use(
-      http.post(`${BASE}/api/jobs`, () =>
+      http.post(`${BASE}/jobs`, () =>
         HttpResponse.json({ error: "missing fields" }, { status: 400 })
       )
     );
@@ -70,15 +70,15 @@ describe("REST client", () => {
     ).rejects.toThrow("startJob failed: 400");
   });
 
-  it("stopJob calls POST /api/jobs/:id/stop", async () => {
+  it("stopJob calls POST /jobs/:id/stop", async () => {
     await expect(stopJob("test-job-1")).resolves.toBeUndefined();
   });
 
-  it("continueJob calls POST /api/jobs/:id/continue", async () => {
+  it("continueJob calls POST /jobs/:id/continue", async () => {
     await expect(continueJob("test-job-1")).resolves.toBeUndefined();
   });
 
-  it("skipJob calls POST /api/jobs/:id/skip", async () => {
+  it("skipJob calls POST /jobs/:id/skip", async () => {
     await expect(skipJob("test-job-1")).resolves.toBeUndefined();
   });
 
